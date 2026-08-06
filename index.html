@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Snake Rush</title>
+<style>
+  :root{
+    --bg-deep:#07030f;
+    --bg-mid:#150a2e;
+    --gold:#ffd23f;
+    --gold-soft:#ffe89a;
+    --green:#39ff9d;
+    --pink:#ff2d6d;
+    --blue:#4fc3ff;
+    --glass-bg:rgba(18,10,36,0.55);
+    --glass-border:rgba(255,210,63,0.22);
+    --text-dim:rgba(255,255,255,0.55);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background:var(--bg-deep);
+    font-family:'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    color:#fff;
+    -webkit-user-select:none; user-select:none;
+  }
+  #gameCanvas{
+    position:fixed; inset:0; width:100vw; height:100vh; display:block;
+    touch-action:none; background:var(--bg-deep);
+  }
+  .num{ font-family:'Consolas','Menlo','Courier New',monospace; font-variant-numeric:tabular-nums; }
+
+  /* ---------- glass panel base ---------- */
+  .glass{
+    background:var(--glass-bg);
+    backdrop-filter:blur(16px) saturate(160%);
+    -webkit-backdrop-filter:blur(16px) saturate(160%);
+    border:1px solid var(--glass-border);
+    border-radius:18px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* ---------- HUD ---------- */
+  #hud{ position:fixed; inset:0; pointer-events:none; z-index:5; }
+  #hud.hidden{ display:none; }
+  .hud-top{
+    position:absolute; top:max(12px, env(safe-area-inset-top)); left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:0 14px; gap:8px;
+  }
+  .panel{ padding:10px 16px; min-width:100px; }
+  .panel .label{ font-size:10px; letter-spacing:0.12em; color:var(--text-dim); font-weight:700; }
+  .panel .value{ font-size:19px; font-weight:800; margin-top:2px; }
+  .balance-panel .value{ color:var(--green); text-shadow:0 0 12px rgba(57,255,157,0.5); }
+  .bet-label{ margin-top:6px; font-size:10px; color:var(--text-dim); }
+  .bet-label span{ color:var(--gold); font-weight:700; }
+  .multiplier-panel{ text-align:center; padding:8px 22px; }
+  .mult-label{ font-size:10px; letter-spacing:0.16em; color:var(--text-dim); font-weight:700; }
+  .mult-value{ font-size:32px; font-weight:800; color:var(--gold); text-shadow:0 0 18px rgba(255,210,63,0.6); line-height:1.1; }
+  .mult-value .x{ font-size:16px; opacity:0.7; margin-left:2px; }
+  .mult-value.pop{ animation:multPop .35s ease; }
+  @keyframes multPop{ 0%{transform:scale(1);} 40%{transform:scale(1.3); filter:brightness(1.6);} 100%{transform:scale(1);} }
+  .pellets-panel{ text-align:right; }
+  .pellets-panel .value{ color:var(--blue); text-shadow:0 0 12px rgba(79,195,255,0.5); }
+
+  .hud-bottom{
+    position:absolute; bottom:max(16px, env(safe-area-inset-bottom)); left:0; right:0;
+    display:flex; justify-content:center; align-items:flex-end; gap:16px; pointer-events:none;
+  }
+  .ctrl-btn{
+    pointer-events:auto; width:72px; height:72px; border-radius:50%;
+    border:2px solid rgba(255,255,255,0.14);
+    background:linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02));
+    color:#fff; font-size:22px; font-weight:700;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    cursor:pointer; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease, opacity .2s ease;
+    -webkit-tap-highlight-color:transparent; touch-action:none;
+  }
+  .ctrl-btn span{ font-size:9px; letter-spacing:0.08em; font-weight:700; opacity:0.8; }
+  .ctrl-btn:active{ transform:scale(0.88); }
+  .turn-btn:hover, .turn-btn:active{ border-color:var(--blue); box-shadow:0 0 22px rgba(79,195,255,0.55); }
+  .dash-btn{ border-color:rgba(57,255,157,0.35); }
+  .dash-btn:hover, .dash-btn:active{ border-color:var(--green); box-shadow:0 0 22px rgba(57,255,157,0.55); }
+  .dash-btn.cooling{ opacity:0.45; filter:grayscale(0.5); }
+  .cashout-btn{
+    pointer-events:auto; width:auto; min-width:150px; height:72px; border-radius:36px;
+    background:linear-gradient(135deg,#ffd23f,#ff9d2f); color:#241300;
+    font-size:15px; font-weight:800; letter-spacing:0.05em; border:none; cursor:pointer;
+    box-shadow:0 0 28px rgba(255,210,63,0.45); transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .cashout-btn:hover{ transform:translateY(-2px); box-shadow:0 0 40px rgba(255,210,63,0.7); }
+  .cashout-btn:active{ transform:scale(0.94); }
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at center, rgba(15,7,28,0.55), rgba(4,2,9,0.9));
+    transition:opacity .3s ease; opacity:1; padding:20px;
+  }
+  .overlay.hidden{ opacity:0; pointer-events:none; }
+  .card{ width:min(92vw, 420px); padding:34px 30px; text-align:center; animation:fadeInUp .4s ease; }
+  @keyframes fadeInUp{ from{opacity:0; transform:translateY(16px);} to{opacity:1; transform:translateY(0);} }
+
+  .logo{ font-size:40px; font-weight:900; letter-spacing:0.03em; margin:0 0 6px; }
+  .logo .s1{ color:var(--green); text-shadow:0 0 20px rgba(57,255,157,0.55); }
+  .logo .s2{ color:var(--gold); text-shadow:0 0 20px rgba(255,210,63,0.55); }
+  .tagline{ color:var(--text-dim); font-size:13.5px; margin:0 0 24px; line-height:1.5; }
+
+  .balance-row{ font-size:13px; color:var(--text-dim); margin-bottom:18px; }
+  .balance-row strong{ color:var(--green); font-size:16px; }
+
+  .bet-control label{ display:block; font-size:10px; letter-spacing:0.14em; color:var(--text-dim); font-weight:700; margin-bottom:8px; }
+  .bet-stepper{ display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:12px; }
+  .bet-stepper button{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.06); color:#fff; font-size:18px; cursor:pointer;
+  }
+  .bet-stepper input{
+    width:110px; text-align:center; font-size:22px; font-weight:800; color:var(--gold);
+    background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); border-radius:10px;
+    padding:8px 4px; -moz-appearance:textfield;
+  }
+  .bet-stepper input::-webkit-outer-spin-button, .bet-stepper input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .quick-bets{ display:flex; justify-content:center; gap:8px; margin-bottom:24px; }
+  .quick-bets button{
+    padding:6px 14px; border-radius:14px; border:1px solid var(--glass-border);
+    background:rgba(255,255,255,0.05); color:var(--text-dim); font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .quick-bets button:hover{ color:#fff; border-color:var(--gold); }
+
+  .play-btn{
+    width:100%; padding:16px; border-radius:16px; border:none; cursor:pointer;
+    background:linear-gradient(135deg,#ffd23f,#ff9d2f); color:#241300;
+    font-size:15px; font-weight:800; letter-spacing:0.06em;
+    box-shadow:0 0 28px rgba(255,210,63,0.4); transition:transform .12s ease;
+  }
+  .play-btn:hover{ transform:translateY(-2px); }
+  .play-btn:active{ transform:scale(0.97); }
+
+  .hint{ margin-top:16px; font-size:11px; color:rgba(255,255,255,0.35); }
+
+  .result-title{ font-size:26px; font-weight:900; letter-spacing:0.04em; margin-bottom:4px; }
+  .card.lose .result-title{ color:var(--pink); text-shadow:0 0 20px rgba(255,45,109,0.6); }
+  .card.win .result-title{ color:var(--gold); text-shadow:0 0 20px rgba(255,210,63,0.6); }
+  .result-sub{ color:var(--text-dim); font-size:13px; margin-bottom:22px; }
+  .result-stats{ display:flex; flex-direction:column; gap:10px; margin-bottom:26px; font-size:14px; }
+  .result-stats > div{ display:flex; justify-content:space-between; padding:8px 4px; border-bottom:1px solid rgba(255,255,255,0.06); }
+  .result-stats span{ font-weight:800; }
+  .lost-amount span, .lost-amount{ color:var(--pink) !important; }
+  .cashout-mult{ font-size:44px; font-weight:900; color:var(--gold); text-shadow:0 0 24px rgba(255,210,63,0.7); margin:6px 0; }
+  .cashout-coins{ font-size:20px; font-weight:800; color:var(--green); margin-bottom:22px; text-shadow:0 0 14px rgba(57,255,157,0.5); }
+
+  @media (max-width:640px){
+    .ctrl-btn{ width:58px; height:58px; font-size:18px; }
+    .cashout-btn{ min-width:118px; height:58px; font-size:12.5px; }
+    .hud-bottom{ gap:10px; }
+    .hud-top{ padding:0 8px; }
+    .panel{ padding:8px 11px; min-width:80px; }
+    .panel .value{ font-size:14px; }
+    .mult-value{ font-size:24px; }
+    .card{ padding:26px 20px; }
+    .logo{ font-size:32px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<!-- ================= HUD ================= -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="glass panel balance-panel">
+      <div class="label">BALANCE</div>
+      <div class="value num" id="balanceValue">$1,000.00</div>
+      <div class="bet-label">BET <span class="num" id="betValue">$10.00</span></div>
+    </div>
+    <div class="glass panel multiplier-panel">
+      <div class="mult-label">MULTIPLIER</div>
+      <div class="mult-value num" id="multiplierValue"><span id="multNum">1.00</span><span class="x">x</span></div>
+    </div>
+    <div class="glass panel pellets-panel">
+      <div class="label">PELLETS</div>
+      <div class="value num" id="pelletsValue">0</div>
+    </div>
+  </div>
+  <div class="hud-bottom">
+    <button id="btnLeft" class="ctrl-btn turn-btn">◀<span>LEFT</span></button>
+    <button id="btnRight" class="ctrl-btn turn-btn">▶<span>RIGHT</span></button>
+    <button id="btnDash" class="ctrl-btn dash-btn">⚡<span id="dashLabel">DASH</span></button>
+    <button id="btnCashout" class="cashout-btn">CASH OUT</button>
+  </div>
+</div>
+
+<!-- ================= MENU ================= -->
+<div id="menu" class="overlay">
+  <div class="glass card">
+    <h1 class="logo"><span class="s1">SNAKE</span><span class="s2">RUSH</span></h1>
+    <p class="tagline">Grow the multiplier. Dash past danger.<br>Cash out before something bites.</p>
+    <div class="balance-row">BALANCE&nbsp; <strong class="num" id="menuBalance">$1,000.00</strong></div>
+    <div class="bet-control">
+      <label>BET AMOUNT</label>
+      <div class="bet-stepper">
+        <button id="betMinus">−</button>
+        <input id="betInput" class="num" type="number" value="10" min="1" step="1">
+        <button id="betPlus">+</button>
+      </div>
+      <div class="quick-bets">
+        <button data-mult="0.5">½</button>
+        <button data-mult="2">2×</button>
+        <button data-max="1">MAX</button>
+      </div>
+    </div>
+    <button id="btnPlay" class="play-btn">PLACE BET &amp; PLAY</button>
+    <div class="hint">Keyboard: ←/→ turn · Space dash · Enter cash out</div>
+  </div>
+</div>
+
+<!-- ================= GAME OVER ================= -->
+<div id="gameOverOverlay" class="overlay hidden">
+  <div class="glass card lose">
+    <div class="result-title">BUSTED</div>
+    <div class="result-sub">Your snake met its end</div>
+    <div class="result-stats">
+      <div>Multiplier reached <span class="num" id="loseMultiplier">1.00x</span></div>
+      <div>Pellets collected <span class="num" id="losePellets">0</span></div>
+      <div class="lost-amount">Lost <span class="num" id="loseBet">$10.00</span></div>
+    </div>
+    <button id="btnBackToMenuLose" class="play-btn">BACK TO MENU</button>
+  </div>
+</div>
+
+<!-- ================= CASH OUT ================= -->
+<div id="cashoutOverlay" class="overlay hidden">
+  <div class="glass card win">
+    <div class="result-title">YOU CASHED OUT</div>
+    <div class="cashout-mult num" id="cashoutMultiplier">1.00x</div>
+    <div class="cashout-coins num" id="cashoutCoins">+$0.00</div>
+    <div class="result-stats">
+      <div>Pellets collected <span class="num" id="cashoutPellets">0</span></div>
+    </div>
+    <button id="btnBackToMenuWin" class="play-btn">BACK TO MENU</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   CONFIG
+   ========================================================================= */
+const CONFIG = {
+  ARENA_RADIUS: 2400,
+  PLAYER_SPEED: 230,
+  PLAYER_TURN_RATE: 3.4,
+  SEGMENT_SPACING: 13,
+  BASE_RADIUS: 9,
+  DASH_DURATION: 0.5,
+  DASH_COOLDOWN: 3.5,
+  DASH_FASTFORWARD_STEPS: 5,
+  PELLET_COUNT: 140,
+  PELLET_RADIUS: 6,
+  INITIAL_AI_COUNT: 6,
+  MAX_AI_COUNT: 14,
+  DIFFICULTY_INTERVAL: 15,
+  STARTING_BALANCE: 1000,
+  DEFAULT_BET: 10,
+};
+const TAU = Math.PI * 2;
+const PERSONALITIES = ['cautious', 'aggressive', 'random', 'hunter'];
+const AI_COLORS = ['#ff2d6d', '#4fc3ff', '#b388ff', '#ff8a3d', '#ff5fa2', '#7cffb2'];
+const PELLET_COLORS = ['#ffd23f', '#39ff9d', '#ff2d6d', '#4fc3ff'];
+const MILESTONES = [2, 5, 10, 20, 50];
+
+/* =========================================================================
+   UTILITIES
+   ========================================================================= */
+function rand(a, b){ return a + Math.random() * (b - a); }
+function dist(x1, y1, x2, y2){ return Math.hypot(x2 - x1, y2 - y1); }
+function lerp(a, b, t){ return a + (b - a) * t; }
+function clamp(v, min, max){ return Math.min(max, Math.max(min, v)); }
+function normalizeAngle(a){ while(a > Math.PI) a -= TAU; while(a < -Math.PI) a += TAU; return a; }
+function formatMoney(n){ return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+function computeMultiplier(pelletsEaten){ return Math.exp(0.01558 * Math.pow(pelletsEaten, 1.2)); }
+function hexToRgb(hex){
+  hex = hex.replace('#', '');
+  const num = parseInt(hex, 16);
+  return { r:(num >> 16) & 255, g:(num >> 8) & 255, b: num & 255 };
+}
+function lerpColor(hexA, hexB, t){
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  return `rgb(${Math.round(lerp(a.r,b.r,t))},${Math.round(lerp(a.g,b.g,t))},${Math.round(lerp(a.b,b.b,t))})`;
+}
+function shadeColor(hex, amt){
+  const {r,g,b} = hexToRgb(hex);
+  const c = v => Math.max(0, Math.min(255, v + amt));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
+/* Reconstructs evenly-spaced body points by walking backward along a
+   snake's recorded head-path history. Classic slither-style body follow. */
+function buildBody(path, count, spacing){
+  const body = [];
+  if(path.length === 0) return body;
+  const head = path[path.length - 1];
+  body.push({ x: head.x, y: head.y });
+  let targetDist = spacing;
+  let accDist = 0;
+  for(let i = path.length - 1; i > 0; i--){
+    const p1 = path[i], p2 = path[i - 1];
+    const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if(segLen === 0) continue;
+    while(accDist + segLen >= targetDist){
+      const t = (targetDist - accDist) / segLen;
+      body.push({ x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t });
+      targetDist += spacing;
+      if(body.length >= count) return body;
+    }
+    accDist += segLen;
+  }
+  while(body.length < count) body.push({ ...body[body.length - 1] });
+  return body;
+}
+
+/* =========================================================================
+   AUDIO (synthesized placeholders — no external audio files)
+   ========================================================================= */
+let audioCtx = null;
+function getAudioCtx(){
+  if(!audioCtx){
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ return null; }
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+  return audioCtx;
+}
+function beep({freq=440, duration=0.1, type='sine', vol=0.15, slideTo=null}={}){
+  const ac = getAudioCtx();
+  if(!ac) return;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, ac.currentTime);
+  if(slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo), ac.currentTime + duration);
+  gain.gain.setValueAtTime(vol, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+  osc.connect(gain).connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + duration + 0.02);
+}
+function playEat(){ beep({freq:520, slideTo:820, duration:0.09, type:'triangle', vol:0.12}); }
+function playCashout(){
+  beep({freq:440, slideTo:1200, duration:0.55, type:'sine', vol:0.18});
+  setTimeout(()=>beep({freq:660, slideTo:1500, duration:0.4, type:'sine', vol:0.15}), 110);
+}
+function playLose(){ beep({freq:220, slideTo:50, duration:0.5, type:'sawtooth', vol:0.2}); }
+function playClick(){ beep({freq:300, duration:0.05, type:'square', vol:0.08}); }
+function playMilestone(){ beep({freq:700, slideTo:1400, duration:0.28, type:'triangle', vol:0.16}); }
+
+/* =========================================================================
+   PARTICLE SYSTEM
+   ========================================================================= */
+class ParticleSystem {
+  constructor(){ this.particles = []; }
+  emit(x, y, opts={}){
+    const count = opts.count || 8;
+    for(let i = 0; i < count; i++){
+      const angle = opts.angle !== undefined ? opts.angle + rand(-0.6, 0.6) : rand(0, TAU);
+      const speed = rand(opts.minSpeed ?? 40, opts.maxSpeed ?? 160);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: rand(opts.minLife ?? 0.4, opts.maxLife ?? 0.9),
+        size: rand(opts.minSize ?? 2, opts.maxSize ?? 5),
+        color: opts.color || '#ffffff',
+      });
+    }
+  }
+  update(dt){
+    for(let i = this.particles.length - 1; i >= 0; i--){
+      const p = this.particles[i];
+      p.life += dt;
+      if(p.life >= p.maxLife){ this.particles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= 0.97; p.vy *= 0.97;
+    }
+  }
+  draw(ctx, toScreen, zoom){
+    for(const p of this.particles){
+      const t = 1 - p.life / p.maxLife;
+      const s = toScreen(p.x, p.y);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, t);
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, (p.size * t + 0.6) * zoom, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  clear(){ this.particles.length = 0; }
+}
+
+/* =========================================================================
+   CAMERA
+   ========================================================================= */
+class Camera {
+  constructor(){ this.x = 0; this.y = 0; this.zoom = 1; this.targetZoom = 1; this.shake = 0; }
+  follow(tx, ty, dt){
+    const f = 1 - Math.pow(0.001, dt);
+    this.x = lerp(this.x, tx, f);
+    this.y = lerp(this.y, ty, f);
+  }
+  update(dt){
+    this.zoom = lerp(this.zoom, this.targetZoom, 1 - Math.pow(0.0005, dt));
+    if(this.shake > 0) this.shake = Math.max(0, this.shake - dt * 30);
+  }
+  worldToScreen(x, y){
+    const sx = this.shake ? rand(-this.shake, this.shake) : 0;
+    const sy = this.shake ? rand(-this.shake, this.shake) : 0;
+    return { x: (x - this.x) * this.zoom + W / 2 + sx, y: (y - this.y) * this.zoom + H / 2 + sy };
+  }
+  pulse(amount){ this.targetZoom = 1 + amount; setTimeout(() => { this.targetZoom = 1; }, 220); }
+  addShake(amount){ this.shake = Math.min(16, this.shake + amount); }
+  reset(){ this.x = 0; this.y = 0; this.zoom = 1; this.targetZoom = 1; this.shake = 0; }
+}
+
+/* =========================================================================
+   SNAKE CLASSES
+   ========================================================================= */
+class SnakeBase {
+  constructor(x, y, angle, color, glowColor, isPlayer=false, initialLength=6){
+    this.x = x; this.y = y; this.angle = angle;
+    this.color = color; this.glowColor = glowColor || color;
+    this.isPlayer = isPlayer;
+    this.speed = CONFIG.PLAYER_SPEED;
+    this.turnRate = CONFIG.PLAYER_TURN_RATE;
+    this.length = initialLength;
+    this.spacing = CONFIG.SEGMENT_SPACING;
+    this.radius = CONFIG.BASE_RADIUS;
+    this.alive = true;
+    this.path = [{ x, y }];
+    // Pre-seed path history so the snake appears fully formed at spawn
+    const totalLen = this.length * this.spacing;
+    const steps = 40;
+    for(let i = 1; i <= steps; i++){
+      const d = (totalLen / steps) * i;
+      this.path.unshift({ x: x - Math.cos(angle) * d, y: y - Math.sin(angle) * d });
+    }
+  }
+  radiusFor(){ return CONFIG.BASE_RADIUS + Math.min(this.length * 0.045, 9); }
+  step(dt, turnDelta){
+    this.angle = normalizeAngle(this.angle + turnDelta);
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+    this.radius = this.radiusFor();
+    const last = this.path[this.path.length - 1];
+    if(dist(last.x, last.y, this.x, this.y) > 2){
+      this.path.push({ x: this.x, y: this.y });
+      const maxNeeded = this.length * this.spacing + 60;
+      const maxPoints = Math.ceil(maxNeeded / 2) + 40;
+      if(this.path.length > maxPoints) this.path.splice(0, this.path.length - maxPoints);
+    }
+  }
+  grow(amount=1){ this.length += amount; }
+  getBody(){ return buildBody(this.path, Math.max(2, Math.round(this.length)), this.spacing); }
+}
+
+class Player extends SnakeBase {
+  constructor(x, y, angle){
+    super(x, y, angle, '#ffd23f', '#39ff9d', true, 6);
+    this.turningDir = 0;
+    this.dashing = false;
+    this.dashTimer = 0;
+    this.dashCooldown = 0;
+    this.pelletsEaten = 0;
+    this.score = 0;
+    this.eatPulse = 0;
+  }
+  get multiplierValue(){ return computeMultiplier(this.pelletsEaten); }
+}
+
+class AISnake extends SnakeBase {
+  constructor(x, y, angle, color, personality){
+    const len = rand(10, 40) | 0;
+    super(x, y, angle, color, color, false, len);
+    this.personality = personality;
+    this.wanderAngle = angle;
+    this.retargetTimer = rand(0.5, 1.5);
+  }
+  decide(dt, world){
+    this.retargetTimer -= dt;
+    let desired = this.angle;
+    const distC = dist(0, 0, this.x, this.y);
+
+    if(distC > CONFIG.ARENA_RADIUS * 0.82){
+      desired = Math.atan2(-this.y, -this.x);
+    } else {
+      let avoidX = 0, avoidY = 0, avoidCount = 0;
+      for(const other of world.allSnakes){
+        if(other === this || !other || !other.alive) continue;
+        const d = dist(this.x, this.y, other.x, other.y);
+        const threat = (other.isPlayer ? 90 : 70) + this.radius + other.radius;
+        if(d < threat){
+          avoidX += (this.x - other.x) / (d || 1);
+          avoidY += (this.y - other.y) / (d || 1);
+          avoidCount++;
+        }
+      }
+      if(avoidCount > 0 && this.personality !== 'hunter'){
+        desired = Math.atan2(avoidY, avoidX);
+      } else if(this.personality === 'hunter' && world.player && world.player.alive){
+        const px = world.player.x + Math.cos(world.player.angle) * 80;
+        const py = world.player.y + Math.sin(world.player.angle) * 80;
+        desired = Math.atan2(py - this.y, px - this.x);
+      } else if(this.personality === 'aggressive'){
+        if(this.retargetTimer <= 0){
+          if(Math.random() < 0.5 && world.player && world.player.alive){
+            desired = Math.atan2(world.player.y - this.y, world.player.x - this.x);
+          } else {
+            const p = world.pelletManager.nearest(this.x, this.y);
+            desired = p ? Math.atan2(p.y - this.y, p.x - this.x) : this.angle + rand(-0.7, 0.7);
+          }
+          this.wanderAngle = desired;
+          this.retargetTimer = rand(1.2, 2.2);
+        } else desired = this.wanderAngle;
+      } else if(this.personality === 'cautious'){
+        if(this.retargetTimer <= 0){
+          const p = world.pelletManager.nearest(this.x, this.y);
+          desired = p ? Math.atan2(p.y - this.y, p.x - this.x) : this.angle + rand(-0.6, 0.6);
+          this.wanderAngle = desired;
+          this.retargetTimer = rand(1.5, 2.8);
+        } else desired = this.wanderAngle;
+      } else {
+        if(this.retargetTimer <= 0){
+          this.wanderAngle = this.angle + rand(-1.4, 1.4);
+          this.retargetTimer = rand(0.6, 1.6);
+        }
+        desired = this.wanderAngle;
+      }
+    }
+
+    let diff = normalizeAngle(desired - this.angle);
+    const maxTurn = this.turnRate * dt;
+    diff = clamp(diff, -maxTurn, maxTurn);
+    this.step(dt, diff);
+  }
+}
+
+/* =========================================================================
+   PELLET MANAGER
+   ========================================================================= */
+class PelletManager {
+  constructor(count){
+    this.pellets = [];
+    for(let i = 0; i < count; i++) this.spawnOne();
+  }
+  spawnOne(){
+    const r = Math.sqrt(Math.random()) * CONFIG.ARENA_RADIUS * 0.95;
+    const a = rand(0, TAU);
+    this.pellets.push({
+      x: Math.cos(a) * r, y: Math.sin(a) * r,
+      radius: CONFIG.PELLET_RADIUS + rand(-1, 2),
+      phase: rand(0, TAU),
+      color: PELLET_COLORS[(Math.random() * PELLET_COLORS.length) | 0],
+    });
+  }
+  nearest(x, y){
+    let best = null, bd = Infinity;
+    for(const p of this.pellets){
+      const d = dist(x, y, p.x, p.y);
+      if(d < bd){ bd = d; best = p; }
+    }
+    return best;
+  }
+  update(dt){ for(const p of this.pellets) p.phase += dt * 3; }
+  checkEat(snake, onEat){
+    for(let i = this.pellets.length - 1; i >= 0; i--){
+      const p = this.pellets[i];
+      if(dist(snake.x, snake.y, p.x, p.y) < snake.radius + p.radius + 2){
+        this.pellets.splice(i, 1);
+        onEat(p);
+        this.spawnOne();
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   COLLISION SYSTEM
+   ========================================================================= */
+function checkPlayerCollisions(player, aiSnakes){
+  if(dist(0, 0, player.x, player.y) > CONFIG.ARENA_RADIUS) return { dead:true, reason:'wall' };
+  for(const enemy of aiSnakes){
+    if(!enemy.alive) continue;
+    const body = enemy.getBody();
+    for(let i = 0; i < body.length; i += 2){
+      const seg = body[i];
+      const rr = player.radius + enemy.radius * (i === 0 ? 1 : 0.85);
+      if(dist(player.x, player.y, seg.x, seg.y) < rr) return { dead:true, reason:'enemy' };
+    }
+  }
+  return { dead:false };
+}
+
+/* =========================================================================
+   GLOBAL STATE
+   ========================================================================= */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth, H = window.innerHeight;
+function resizeCanvas(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const particleSystem = new ParticleSystem();
+const camera = new Camera();
+
+const game = {
+  state: 'menu', // menu | playing | dying | gameover | cashing | cashout
+  stateTimer: 0,
+  balance: CONFIG.STARTING_BALANCE,
+  bet: CONFIG.DEFAULT_BET,
+  player: null,
+  aiSnakes: [],
+  pelletManager: null,
+  elapsedTime: 0,
+  difficultyTimer: 0,
+  difficultySpeedMult: 1,
+  milestonesHit: new Set(),
+  pendingCashout: null,
+};
+
+let ambientParticles = [];
+function initAmbient(){
+  ambientParticles = [];
+  for(let i = 0; i < 70; i++){
+    ambientParticles.push({
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.6, 2.2), speed: rand(6, 18),
+      alpha: rand(0.08, 0.32), drift: rand(-6, 6),
+    });
+  }
+}
+function updateAmbient(dt){
+  for(const p of ambientParticles){
+    p.y -= p.speed * dt;
+    p.x += p.drift * dt * 0.2;
+    if(p.y < -10){ p.y = H + 10; p.x = rand(0, W); }
+    if(p.x < -10) p.x = W + 10;
+    if(p.x > W + 10) p.x = -10;
+  }
+}
+function drawAmbient(){
+  ctx.save();
+  ctx.fillStyle = '#ffe89a';
+  for(const p of ambientParticles){
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
+let confetti = [];
+function spawnConfetti(){
+  confetti = [];
+  const colors = ['#ffd23f', '#39ff9d', '#ff2d6d', '#4fc3ff', '#ffffff'];
+  for(let i = 0; i < 140; i++){
+    confetti.push({
+      x: rand(0, W), y: rand(-H * 0.3, 0),
+      vx: rand(-40, 40), vy: rand(80, 220),
+      size: rand(4, 9), rot: rand(0, TAU), vr: rand(-6, 6),
+      color: colors[(Math.random() * colors.length) | 0],
+      life: 0, maxLife: rand(2.5, 4.5),
+    });
+  }
+}
+function updateConfetti(dt){
+  for(const c of confetti){
+    c.life += dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vy += 60 * dt; c.rot += c.vr * dt;
+  }
+  confetti = confetti.filter(c => c.life < c.maxLife && c.y < H + 40);
+}
+function drawConfetti(){
+  for(const c of confetti){
+    ctx.save();
+    ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.color;
+    ctx.globalAlpha = clamp(1 - c.life / c.maxLife, 0, 1);
+    ctx.fillRect(-c.size / 2, -c.size / 2, c.size, c.size * 0.6);
+    ctx.restore();
+  }
+}
+
+/* =========================================================================
+   AI SPAWN / DIFFICULTY
+   ========================================================================= */
+function spawnAISnake(){
+  let x = 0, y = 0, tries = 0;
+  do {
+    const r = rand(300, CONFIG.ARENA_RADIUS * 0.9);
+    const a = rand(0, TAU);
+    x = Math.cos(a) * r; y = Math.sin(a) * r;
+    tries++;
+  } while(game.player && dist(x, y, game.player.x, game.player.y) < 260 && tries < 10);
+  const personality = PERSONALITIES[(Math.random() * PERSONALITIES.length) | 0];
+  const color = AI_COLORS[(Math.random() * AI_COLORS.length) | 0];
+  const ai = new AISnake(x, y, rand(0, TAU), color, personality);
+  ai.speed = CONFIG.PLAYER_SPEED * rand(0.8, 1.0) * game.difficultySpeedMult;
+  game.aiSnakes.push(ai);
+}
+function bumpDifficulty(){
+  game.difficultySpeedMult = Math.min(1.6, game.difficultySpeedMult + 0.05);
+  for(const ai of game.aiSnakes){
+    ai.speed = Math.min(CONFIG.PLAYER_SPEED * 1.7, ai.speed * 1.05);
+    ai.grow(rand(2, 6) | 0);
+  }
+  if(game.aiSnakes.length < CONFIG.MAX_AI_COUNT) spawnAISnake();
+}
+
+/* =========================================================================
+   GAME LIFECYCLE
+   ========================================================================= */
+function resetGame(){
+  game.player = new Player(0, 0, rand(0, TAU));
+  game.aiSnakes = [];
+  for(let i = 0; i < CONFIG.INITIAL_AI_COUNT; i++) spawnAISnake();
+  game.pelletManager = new PelletManager(CONFIG.PELLET_COUNT);
+  particleSystem.clear();
+  confetti = [];
+  game.elapsedTime = 0;
+  game.difficultyTimer = 0;
+  game.difficultySpeedMult = 1;
+  game.milestonesHit = new Set();
+  camera.reset();
+}
+function startGame(){
+  resetGame();
+  game.state = 'playing';
+  toggleOverlay(els.menu, false);
+  toggleOverlay(els.gameOver, false);
+  toggleOverlay(els.cashoutOv, false);
+  els.hud.classList.remove('hidden');
+  lastMultText = null;
+  updateHUD();
+}
+function triggerGameOver(){
+  game.state = 'dying';
+  game.stateTimer = 0.6;
+  playLose();
+  camera.addShake(15);
+  particleSystem.emit(game.player.x, game.player.y, { count:44, color:'#ff2d6d', minSpeed:80, maxSpeed:340, minLife:0.5, maxLife:1.1 });
+  particleSystem.emit(game.player.x, game.player.y, { count:20, color:'#ffd23f', minSpeed:40, maxSpeed:200, minLife:0.4, maxLife:0.9 });
+}
+function finalizeGameOver(){
+  game.state = 'gameover';
+  els.loseMultiplier.textContent = game.player.multiplierValue.toFixed(2) + 'x';
+  els.losePellets.textContent = game.player.pelletsEaten;
+  els.loseBet.textContent = formatMoney(game.bet);
+  els.hud.classList.add('hidden');
+  toggleOverlay(els.gameOver, true);
+}
+function tryCashOut(){
+  if(game.state !== 'playing') return;
+  const mult = game.player.multiplierValue;
+  const coins = game.bet * mult;
+  game.balance += coins;
+  game.pendingCashout = { mult, coins, pellets: game.player.pelletsEaten };
+  game.state = 'cashing';
+  game.stateTimer = 0.45;
+  camera.pulse(0.14);
+  camera.addShake(4);
+}
+function finalizeCashOut(){
+  game.state = 'cashout';
+  const { mult, coins, pellets } = game.pendingCashout;
+  els.cashoutMultiplier.textContent = mult.toFixed(2) + 'x';
+  els.cashoutCoins.textContent = '+' + formatMoney(coins);
+  els.cashoutPellets.textContent = pellets;
+  els.hud.classList.add('hidden');
+  toggleOverlay(els.cashoutOv, true);
+  playCashout();
+  spawnConfetti();
+}
+function backToMenu(){
+  game.state = 'menu';
+  toggleOverlay(els.gameOver, false);
+  toggleOverlay(els.cashoutOv, false);
+  updateMenuUI();
+  toggleOverlay(els.menu, true);
+}
+function tryDash(){
+  if(game.state !== 'playing') return;
+  const p = game.player;
+  if(p.dashing || p.dashCooldown > 0) return;
+  p.dashing = true;
+  p.dashTimer = CONFIG.DASH_DURATION;
+  playClick();
+}
+function onPlayerEat(pellet){
+  const p = game.player;
+  p.pelletsEaten++;
+  p.grow(1);
+  p.score += 10;
+  p.eatPulse = 1;
+  particleSystem.emit(pellet.x, pellet.y, { count:14, color:pellet.color, minSpeed:60, maxSpeed:220, maxLife:0.6 });
+  camera.addShake(2.2);
+  playEat();
+  triggerMultiplierPop();
+  checkMilestone(p.multiplierValue);
+}
+function checkMilestone(mult){
+  for(const m of MILESTONES){
+    if(mult >= m && !game.milestonesHit.has(m)){
+      game.milestonesHit.add(m);
+      camera.pulse(0.07);
+      particleSystem.emit(game.player.x, game.player.y, { count:28, color:'#ffd23f', minSpeed:100, maxSpeed:300, minLife:0.5, maxLife:0.9 });
+      playMilestone();
+    }
+  }
+}
+
+/* =========================================================================
+   UPDATE
+   ========================================================================= */
+function getWorld(){
+  return { player: game.player, aiSnakes: game.aiSnakes, pelletManager: game.pelletManager, allSnakes: [game.player, ...game.aiSnakes] };
+}
+function update(dt){
+  updateAmbient(dt);
+  updateConfetti(dt);
+
+  if(game.state === 'menu'){
+    camera.update(dt);
+    return;
+  }
+  if(game.state === 'dying'){
+    game.stateTimer -= dt;
+    particleSystem.update(dt);
+    camera.update(dt);
+    if(game.stateTimer <= 0) finalizeGameOver();
+    return;
+  }
+  if(game.state === 'cashing'){
+    game.stateTimer -= dt;
+    particleSystem.update(dt);
+    camera.update(dt);
+    if(game.stateTimer <= 0) finalizeCashOut();
+    return;
+  }
+  if(game.state !== 'playing') return;
+
+  game.elapsedTime += dt;
+  game.difficultyTimer += dt;
+  if(game.difficultyTimer > CONFIG.DIFFICULTY_INTERVAL){
+    game.difficultyTimer = 0;
+    bumpDifficulty();
+  }
+
+  const player = game.player;
+  if(player.eatPulse > 0) player.eatPulse = Math.max(0, player.eatPulse - dt * 3);
+  if(player.dashCooldown > 0) player.dashCooldown = Math.max(0, player.dashCooldown - dt);
+
+  const world = getWorld();
+
+  if(player.dashing){
+    player.dashTimer -= dt;
+    const subSteps = CONFIG.DASH_FASTFORWARD_STEPS;
+    const subDt = dt / subSteps;
+    for(let s = 0; s < subSteps; s++){
+      for(const ai of game.aiSnakes) ai.decide(subDt, world);
+    }
+    player.step(dt, 0);
+    if(Math.random() < 0.7){
+      particleSystem.emit(player.x, player.y, { count:2, color:'#39ff9d', minSpeed:0, maxSpeed:20, minLife:0.22, maxLife:0.38, minSize:2, maxSize:4 });
+    }
+    if(player.dashTimer <= 0){
+      player.dashing = false;
+      player.dashCooldown = CONFIG.DASH_COOLDOWN;
+    }
+  } else {
+    const turnDelta = player.turningDir * player.turnRate * dt;
+    player.step(dt, turnDelta);
+    for(const ai of game.aiSnakes) ai.decide(dt, world);
+    game.pelletManager.checkEat(player, onPlayerEat);
+    const result = checkPlayerCollisions(player, game.aiSnakes);
+    if(result.dead){ triggerGameOver(); return; }
+  }
+
+  game.pelletManager.update(dt);
+  particleSystem.update(dt);
+  camera.follow(player.x, player.y, dt);
+  camera.update(dt);
+  updateHUD();
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+function drawBackground(){
+  const grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H) * 0.75);
+  grad.addColorStop(0, '#150a2e');
+  grad.addColorStop(0.55, '#0b0518');
+  grad.addColorStop(1, '#050209');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  drawGrid();
+  drawAmbient();
+}
+function drawGrid(){
+  const spacing = 70;
+  const offX = (-camera.x * 0.25) % spacing;
+  const offY = (-camera.y * 0.25) % spacing;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,90,200,0.08)';
+  ctx.lineWidth = 1;
+  for(let x = offX - spacing; x < W + spacing; x += spacing){
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for(let y = offY - spacing; y < H + spacing; y += spacing){
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawArenaBoundary(){
+  const center = camera.worldToScreen(0, 0);
+  const r = CONFIG.ARENA_RADIUS * camera.zoom;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(center.x, center.y, r, 0, TAU);
+  ctx.strokeStyle = 'rgba(255,45,109,0.55)';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#ff2d6d'; ctx.shadowBlur = 25;
+  ctx.stroke();
+  ctx.beginPath(); ctx.arc(center.x, center.y, r - 8, 0, TAU);
+  ctx.strokeStyle = 'rgba(79,195,255,0.22)';
+  ctx.lineWidth = 1; ctx.shadowBlur = 0;
+  ctx.stroke();
+  ctx.restore();
+}
+function drawPellets(){
+  for(const p of game.pelletManager.pellets){
+    const s = camera.worldToScreen(p.x, p.y);
+    if(s.x < -30 || s.x > W + 30 || s.y < -30 || s.y > H + 30) continue;
+    const pulse = 1 + 0.18 * Math.sin(p.phase);
+    const rr = p.radius * camera.zoom * pulse;
+    ctx.save();
+    ctx.shadowColor = p.color; ctx.shadowBlur = 16;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rr * 1.9, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+function drawDashTrail(snake){
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const head = camera.worldToScreen(snake.x, snake.y);
+  for(let k = 1; k <= 5; k++){
+    const back = k * 14;
+    const gx = snake.x - Math.cos(snake.angle) * back;
+    const gy = snake.y - Math.sin(snake.angle) * back;
+    const gs = camera.worldToScreen(gx, gy);
+    ctx.globalAlpha = 0.22 * (1 - k / 6);
+    ctx.strokeStyle = '#39ff9d';
+    ctx.lineWidth = snake.radius * camera.zoom * 1.4 * (1 - k / 7);
+    ctx.beginPath(); ctx.moveTo(head.x, head.y); ctx.lineTo(gs.x, gs.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawSnake(snake, isPlayer){
+  const body = snake.getBody();
+  if(body.length === 0) return;
+  const colorA = isPlayer ? '#39ff9d' : shadeColor(snake.color, -50);
+  const colorB = isPlayer ? '#ffd23f' : snake.color;
+  const n = Math.max(1, body.length - 1);
+  for(let i = body.length - 1; i >= 0; i--){
+    const t = 1 - i / n;
+    const pt = body[i];
+    const s = camera.worldToScreen(pt.x, pt.y);
+    const taper = 0.55 + 0.45 * t;
+    let rad = snake.radius * camera.zoom * taper;
+    if(i === 0 && isPlayer && snake.eatPulse > 0) rad += snake.eatPulse * 5 * camera.zoom;
+    ctx.save();
+    ctx.fillStyle = lerpColor(colorA, colorB, t);
+    ctx.shadowColor = isPlayer ? '#ffd23f' : snake.color;
+    ctx.shadowBlur = i === 0 ? 22 : 9;
+    ctx.globalAlpha = isPlayer ? 1 : 0.92;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  const head = body[0];
+  const hs = camera.worldToScreen(head.x, head.y);
+  const eyeOffset = snake.radius * camera.zoom * 0.5;
+  const perp = snake.angle + Math.PI / 2;
+  ctx.fillStyle = '#0a0510';
+  for(const sign of [-1, 1]){
+    const ex = hs.x + Math.cos(snake.angle) * eyeOffset * 0.9 + Math.cos(perp) * eyeOffset * sign * 0.55;
+    const ey = hs.y + Math.sin(snake.angle) * eyeOffset * 0.9 + Math.sin(perp) * eyeOffset * sign * 0.55;
+    ctx.beginPath(); ctx.arc(ex, ey, Math.max(1.4, snake.radius * camera.zoom * 0.16), 0, TAU); ctx.fill();
+  }
+  if(isPlayer && snake.dashing) drawDashTrail(snake);
+}
+function render(){
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  if(game.state !== 'menu'){
+    drawArenaBoundary();
+    if(game.pelletManager) drawPellets();
+    for(const ai of game.aiSnakes) drawSnake(ai, false);
+    if(game.player) drawSnake(game.player, true);
+    particleSystem.draw(ctx, (x,y) => camera.worldToScreen(x,y), camera.zoom);
+  }
+  if(confetti.length) drawConfetti();
+}
+
+/* =========================================================================
+   HUD
+   ========================================================================= */
+let lastMultText = null;
+function triggerMultiplierPop(){
+  const el = els.multiplierValue;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+}
+function updateHUD(){
+  els.balanceValue.textContent = formatMoney(game.balance);
+  els.betValue.textContent = formatMoney(game.bet);
+  els.pelletsValue.textContent = game.player ? game.player.pelletsEaten : 0;
+  const mult = game.player ? game.player.multiplierValue : 1;
+  const rounded = mult.toFixed(2);
+  if(rounded !== lastMultText){
+    els.multNum.textContent = rounded;
+    if(lastMultText !== null) triggerMultiplierPop();
+    lastMultText = rounded;
+  }
+  if(game.player){
+    if(game.player.dashCooldown > 0){
+      els.btnDash.classList.add('cooling');
+      els.dashLabel.textContent = Math.ceil(game.player.dashCooldown) + 's';
+    } else {
+      els.btnDash.classList.remove('cooling');
+      els.dashLabel.textContent = 'DASH';
+    }
+  }
+}
+function toggleOverlay(el, show){
+  if(show) el.classList.remove('hidden'); else el.classList.add('hidden');
+}
+function updateMenuUI(){
+  els.menuBalance.textContent = formatMoney(game.balance);
+  els.betInput.value = currentBet;
+}
+
+/* =========================================================================
+   DOM REFS
+   ========================================================================= */
+const els = {
+  hud: document.getElementById('hud'),
+  balanceValue: document.getElementById('balanceValue'),
+  betValue: document.getElementById('betValue'),
+  multiplierValue: document.getElementById('multiplierValue'),
+  multNum: document.getElementById('multNum'),
+  pelletsValue: document.getElementById('pelletsValue'),
+  btnLeft: document.getElementById('btnLeft'),
+  btnRight: document.getElementById('btnRight'),
+  btnDash: document.getElementById('btnDash'),
+  dashLabel: document.getElementById('dashLabel'),
+  btnCashout: document.getElementById('btnCashout'),
+  menu: document.getElementById('menu'),
+  menuBalance: document.getElementById('menuBalance'),
+  betInput: document.getElementById('betInput'),
+  betMinus: document.getElementById('betMinus'),
+  betPlus: document.getElementById('betPlus'),
+  btnPlay: document.getElementById('btnPlay'),
+  gameOver: document.getElementById('gameOverOverlay'),
+  loseMultiplier: document.getElementById('loseMultiplier'),
+  losePellets: document.getElementById('losePellets'),
+  loseBet: document.getElementById('loseBet'),
+  btnBackToMenuLose: document.getElementById('btnBackToMenuLose'),
+  cashoutOv: document.getElementById('cashoutOverlay'),
+  cashoutMultiplier: document.getElementById('cashoutMultiplier'),
+  cashoutCoins: document.getElementById('cashoutCoins'),
+  cashoutPellets: document.getElementById('cashoutPellets'),
+  btnBackToMenuWin: document.getElementById('btnBackToMenuWin'),
+};
+
+/* =========================================================================
+   INPUT
+   ========================================================================= */
+let currentBet = CONFIG.DEFAULT_BET;
+const keyState = { left:false, right:false };
+const buttonState = { left:false, right:false };
+function syncTurn(){
+  const dir = (keyState.right || buttonState.right ? 1 : 0) - (keyState.left || buttonState.left ? 1 : 0);
+  if(game.player) game.player.turningDir = dir;
+}
+window.addEventListener('keydown', (e) => {
+  if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'){ keyState.left = true; syncTurn(); }
+  if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ keyState.right = true; syncTurn(); }
+  if(e.code === 'Space'){ e.preventDefault(); tryDash(); }
+  if(e.key === 'c' || e.key === 'C' || e.key === 'Enter'){ tryCashOut(); }
+});
+window.addEventListener('keyup', (e) => {
+  if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'){ keyState.left = false; syncTurn(); }
+  if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ keyState.right = false; syncTurn(); }
+});
+function bindHoldButton(el, side){
+  const set = (v) => { buttonState[side] = v; syncTurn(); };
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); set(true); });
+  el.addEventListener('pointerup', () => set(false));
+  el.addEventListener('pointerleave', () => set(false));
+  el.addEventListener('pointercancel', () => set(false));
+  window.addEventListener('pointerup', () => set(false));
+}
+bindHoldButton(els.btnLeft, 'left');
+bindHoldButton(els.btnRight, 'right');
+els.btnDash.addEventListener('click', tryDash);
+els.btnCashout.addEventListener('click', tryCashOut);
+
+els.betMinus.addEventListener('click', () => { currentBet = Math.max(1, currentBet - 1); updateMenuUI(); playClick(); });
+els.betPlus.addEventListener('click', () => { currentBet = Math.min(Math.max(1, game.balance), currentBet + 1); updateMenuUI(); playClick(); });
+els.betInput.addEventListener('input', () => {
+  const v = parseFloat(els.betInput.value);
+  currentBet = clamp(isNaN(v) ? 1 : Math.round(v), 1, Math.max(1, Math.floor(game.balance)));
+});
+document.querySelectorAll('.quick-bets button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if(btn.dataset.mult) currentBet = clamp(Math.round(currentBet * parseFloat(btn.dataset.mult)), 1, Math.max(1, Math.floor(game.balance)));
+    if(btn.dataset.max) currentBet = Math.max(1, Math.floor(game.balance));
+    updateMenuUI(); playClick();
+  });
+});
+els.btnPlay.addEventListener('click', () => {
+  getAudioCtx();
+  if(currentBet > game.balance || currentBet <= 0) return;
+  game.balance -= currentBet;
+  game.bet = currentBet;
+  playClick();
+  startGame();
+});
+els.btnBackToMenuLose.addEventListener('click', () => { playClick(); backToMenu(); });
+els.btnBackToMenuWin.addEventListener('click', () => { playClick(); backToMenu(); });
+
+window.addEventListener('resize', () => { resizeCanvas(); initAmbient(); });
+
+/* =========================================================================
+   MAIN LOOP
+   ========================================================================= */
+let lastTime = performance.now();
+function loop(now){
+  const dt = Math.min(0.033, (now - lastTime) / 1000);
+  lastTime = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+function init(){
+  resizeCanvas();
+  initAmbient();
+  updateMenuUI();
+  requestAnimationFrame(loop);
+}
+init();
+
+})();
+</script>
+</body>
+</html>
